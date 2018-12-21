@@ -1,0 +1,105 @@
+#!/bin/bash
+
+echo "Budowanie srodowiska przebiegnie w katalogu $(pwd)"
+read -p "Czy kontynuowac? (t/n):" RET
+if [ ${RET} = 'n' ]; then exit; fi
+BASE=$(pwd)
+
+
+# Liczba procesorow
+NCPU=$(nproc)
+
+PYTHON_PATH="/opt/python/python3.4"
+PYTHON="${PYTHON_PATH}/bin/python3.4"
+alias python=${PYTHON}
+export PATH=/opt/python/python3.4/bin:$PATH
+
+CLIBRARYS='python3.4 libpng freetype'
+#PLIBRARYS='setuptools pip'
+PLIBRARYS=''
+PMODULES='pip setuptools numpy pyparsing cycler six pytz python-dateutil matplotlib scipy pympler hashlib'
+
+declare -A SRCARCH
+SRCARCH[python3.4]='https://www.python.org/ftp/python/3.4.0/Python-3.4.0.tgz'
+SRCARCH[pip]='https://files.pythonhosted.org/packages/45/ae/8a0ad77defb7cc903f09e551d88b443304a9bd6e6f124e75c0fbbf6de8f7/pip-18.1.tar.gz'
+SRCARCH[setuptools]='https://files.pythonhosted.org/packages/37/1b/b25507861991beeade31473868463dad0e58b1978c209de27384ae541b0b/setuptools-40.6.3.zip'
+SRCARCH[libpng]='https://download.sourceforge.net/libpng/libpng-1.6.36.tar.gz'
+SRCARCH[freetype]='https://download.savannah.gnu.org/releases/freetype/freetype-2.9.tar.gz'
+
+pre_install() {
+  LIB=$1
+
+    echo "******************************"
+    echo "Kompilacja $LIB"
+    echo "******************************"
+    echo "Tworze katalog ${BASE}/${LIB}"
+    mkdir ${BASE}/${LIB}
+    echo "Przechodze do katalogu ${BASE}/${LIB}"
+    cd ${BASE}/${LIB}
+    echo "Sciagam archiwum dla ${LIB}"
+    wget ${SRCARCH[${LIB}]}
+    FILE=$(basename ${SRCARCH[${LIB}]})
+    echo "Rozpakowuje archiwum ${PLIK}"
+    if [[ $FILE =~ .*.tar.gz ]]; then EXT='tgz'; DIR=${FILE%*.tar.gz}; fi
+    if [[ $FILE =~ .*.tgz ]]; then EXT='tgz'; DIR=${FILE%*.tgz}; fi
+    if [[ $FILE =~ .*.zip ]]; then EXT='zip'; DIR=${FILE%*.zip}; fi
+    case $EXT in
+      tgz) tar -zxf $FILE;;
+      zip) unzip -q $FILE;;
+    esac
+    echo "Przechodze do katalogu ${DIR}"
+    cd ${DIR}
+}
+
+for CLIB in ${CLIBRARYS}; do
+  if [ -d ${CLIB} ]; then
+    echo "**************************************"
+    echo "Katalog ${CLIB} juz istnieje, pomijam!"
+    echo "**************************************"
+  else
+    pre_install ${CLIB}
+    echo "Instaluje ${CLIB}"
+    ./configure --prefix=$PYTHON_PATH --exec-prefix=$PYTHON_PATH
+    make -j$NCPU
+    RET=$?
+    if [ ${RET} != 0 ]; then exit ${RET}; fi
+    make install
+    RET=$?
+    if [ ${RET} != 0 ]; then exit ${RET}; fi
+    cd ${BASE}
+  fi
+done
+
+for PLIB in ${PLIBRARYS}; do
+  if [ -d ${PLIB} ]; then
+    echo "**************************************"
+    echo "Katalog ${PLIB} juz istnieje, pomijam!"
+    echo "**************************************"
+  else
+    pre_install ${PLIB}
+    echo "Instaluje ${PLIB}"
+    ${PYTHON} ./setup.py install
+    cd ${BASE} 
+  fi
+done
+
+PIP=${PYTHON_PATH}/bin/pip
+if ! [ -x ${PIP} ]; then
+  PIP=${PYTHON_PATH}/bin/pip3;
+elif ! [ -x ${PIP} ]; then
+  echo "PIP not exist!";
+  exit 1;
+fi
+
+for PMODULE in ${PMODULES}; do
+  echo "******************************"
+  echo "Instalacja ${PMODULE}"
+  echo "******************************"
+  
+  if ${PIP} list|grep ${PMODULE} > /dev/null; then
+    ${PIP} install --upgrade ${PMODULE};
+  else
+    ${PIP} install ${PMODULE};
+  fi
+done
+
